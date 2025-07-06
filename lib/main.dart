@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:navgi/item_provider.dart';
+import 'package:navgi/item.dart';
 
 void main() {
   runApp(MyApp());
@@ -28,20 +29,34 @@ class _PageState extends ConsumerState<Page> {
   final TextEditingController _editingController = TextEditingController();
 
   @override
+  void dispose() {
+    _controller.dispose();
+    _editingController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    var list = ref.watch(itemsProvider);
+    final list = ref.watch(itemsProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: Text("TODO"),
         backgroundColor: Colors.blueAccent,
       ),
       body: list.isEmpty
-          ? Center(child: Text("No Note", style: TextStyle(fontSize: 20, color: Colors.grey)))
+          ? Center(
+              child: Text(
+                "No Tasks Yet",
+                style: TextStyle(fontSize: 20, color: Colors.grey),
+              ),
+            )
           : Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
               child: ListView.builder(
                 itemCount: list.length,
                 itemBuilder: (context, index) {
+                  final item = list[index];
                   return Card(
                     elevation: 3,
                     margin: const EdgeInsets.symmetric(vertical: 6),
@@ -50,56 +65,24 @@ class _PageState extends ConsumerState<Page> {
                       leading: CircleAvatar(
                         backgroundColor: Colors.blue.shade100,
                         foregroundColor: Colors.blue.shade900,
-                        child: Text(list[index].name.isNotEmpty ? list[index].name[0].toUpperCase() : '?'),
+                        child: Text(
+                          item.name.isNotEmpty ? item.name[0].toUpperCase() : '?',
+                        ),
                       ),
-                      title: Text(list[index].name, style: TextStyle(fontWeight: FontWeight.w600)),
+                      title: Text(
+                        item.name,
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            onPressed: () {
-                              _editingController.text = list[index].name;
-                              showDialog(
-                                context: context,
-                                builder: (context) {
-                                  return AlertDialog(
-                                    title: Text("Edit TASK"),
-                                    content: TextField(
-                                      controller: _editingController,
-                                      onChanged: (value){
-                                        value = _editingController.text;
-                                      },
-                                      decoration: InputDecoration(hintText: "Enter new name"),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () {
-                                          Navigator.of(context).pop();
-                                          _editingController.clear();
-                                        },
-                                        child: Text("Cancel"),
-                                      ),
-                                      ElevatedButton(
-                                        onPressed: () {
-                                          ref.read(itemsProvider.notifier).updateItem(
-                                            list[index].id,
-                                            _editingController.text.trim(),
-                                          );
-                                          Navigator.of(context).pop();
-                                          _editingController.clear();
-                                        },
-                                        child: Text("OK"),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              );
-                            },
+                            onPressed: () => _showEditDialog(context, item),
                             icon: Icon(Icons.edit, color: Colors.orange),
                           ),
                           IconButton(
                             onPressed: () {
-                              ref.read(itemsProvider.notifier).removeItem(list[index].id);
+                              ref.read(itemsProvider.notifier).removeItem(item.id);
                             },
                             icon: Icon(Icons.remove_circle, color: Colors.red),
                           ),
@@ -111,42 +94,82 @@ class _PageState extends ConsumerState<Page> {
               ),
             ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showDialog(
-            context: context,
-            builder: (context) {
-              return AlertDialog(
-                title: Text("Add New Task"),
-                content: TextField(
-                  controller: _controller,
-                  decoration: InputDecoration(hintText: "Enter task name"),
-                  onChanged: (value) {
-                    _controller.text = value;
-                  },
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _controller.clear();
-                    },
-                    child: Text("Cancel"),
-                  ),
-                  ElevatedButton(
-                      onPressed: () {
-                        ref.read(itemsProvider.notifier).addItem(_controller.text.trim());
-                        Navigator.of(context).pop();
-                        _controller.clear();
-                      },
-                      child: Text("OK")
-                  ),
-                ],
-              );
-            },
-          );
-        },
+        onPressed: () => _showAddDialog(context),
         child: Icon(Icons.add),
       ),
+    );
+  }
+
+  void _showAddDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Add New Task"),
+          content: TextField(
+            controller: _controller,
+            decoration: InputDecoration(hintText: "Enter task name"),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _controller.clear();
+              },
+              child: Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final taskName = _controller.text.trim();
+                if (taskName.isNotEmpty) {
+                  ref.read(itemsProvider.notifier).addItem(taskName);
+                  Navigator.of(context).pop();
+                  _controller.clear();
+                }
+              },
+              child: Text("Add"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showEditDialog(BuildContext context, Item item) {
+    _editingController.text = item.name;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Edit Task"),
+          content: TextField(
+            controller: _editingController,
+            decoration: InputDecoration(hintText: "Enter new task name"),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _editingController.clear();
+              },
+              child: Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final newName = _editingController.text.trim();
+                if (newName.isNotEmpty && newName != item.name) {
+                  ref.read(itemsProvider.notifier).updateItem(item.id, newName);
+                }
+                Navigator.of(context).pop();
+                _editingController.clear();
+              },
+              child: Text("Update"),
+            ),
+          ],
+        );
+      },
     );
   }
 }
